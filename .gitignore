@@ -1,0 +1,5 @@
+# Игнорируем все в папке data
+/data/*
+
+# Но не игнорируем solutions.json
+!/data/solutions.json 

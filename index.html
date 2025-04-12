@@ -43,7 +43,7 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
             <div class="bg-white p-6 rounded-lg shadow">
                 <h2 class="text-xl font-semibold mb-4">Current Memory Usage</h2>
                 <canvas id="currentMemoryChart"></canvas>
@@ -80,24 +80,142 @@
     </div>
 
     <script>
-        // Загрузка данных из JSON
-        let chartData;
+        // Глобальные переменные
+        let chartData = null;
+        let charts = {};
         
+        // Функция для создания пустой структуры данных
+        function createEmptyDataStructure() {
+            return {
+                iterations: [],
+                durations: {
+                    build: { github: [], gitlab: [], gitverse: [] },
+                    test: { github: [], gitlab: [], gitverse: [] },
+                    typecheck: { github: [], gitlab: [], gitverse: [] }
+                },
+                cpu: {
+                    build: { github: [], gitlab: [], gitverse: [] },
+                    test: { github: [], gitlab: [], gitverse: [] },
+                    typecheck: { github: [], gitlab: [], gitverse: [] }
+                },
+                memory: {
+                    current: { github: [], gitlab: [], gitverse: [] },
+                    peak: { github: [], gitlab: [], gitverse: [] }
+                },
+                solutions: {},
+                criteriaTranslations: {}
+            };
+        }
+
+        // Функция для безопасной загрузки JSON
+        async function safeJsonFetch(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    console.warn(`Ошибка загрузки ${url}: ${response.status}`);
+                    return null;
+                }
+                return await response.json();
+            } catch (error) {
+                console.warn(`Ошибка загрузки ${url}:`, error);
+                return null;
+            }
+        }
+
+        // Загрузка данных
         async function loadData() {
             try {
-                const response = await fetch('data.json');
-                chartData = await response.json();
-                initializeCharts();
-                initializeCriteria();
+                // Создаем новую структуру данных
+                const newData = createEmptyDataStructure();
+
+                // Загружаем информацию об итерациях
+                const iterationsData = await safeJsonFetch('data/iterations.json');
+                if (!iterationsData?.iterations) {
+                    console.error('Не удалось загрузить данные об итерациях');
+                    return;
+                }
+                newData.iterations = iterationsData.iterations;
+
+                // Загружаем данные о решениях
+                const solutionsData = await safeJsonFetch('data/solutions.json');
+                if (solutionsData) {
+                    newData.solutions = solutionsData.solutions;
+                    newData.criteriaTranslations = solutionsData.criteriaTranslations;
+                }
+
+                // Загружаем данные для каждой итерации и платформы
+                const platforms = ['github', 'gitlab', 'gitverse'];
+                
+                for (const iteration of newData.iterations) {
+                    for (const platform of platforms) {
+                        const data = await safeJsonFetch(`data/iteration_${iteration}/data_${platform}.json`);
+                        if (!data) continue;
+
+                        // Заполняем массивы данными из итерации
+                        Object.entries(data.durations).forEach(([phase, values]) => {
+                            if (values[platform] !== undefined) {
+                                newData.durations[phase][platform][iteration - 1] = values[platform];
+                            }
+                        });
+
+                        Object.entries(data.cpu).forEach(([phase, values]) => {
+                            if (values[platform] !== undefined) {
+                                newData.cpu[phase][platform][iteration - 1] = values[platform];
+                            }
+                        });
+
+                        Object.entries(data.memory).forEach(([type, values]) => {
+                            if (values[platform] !== undefined) {
+                                newData.memory[type][platform][iteration - 1] = values[platform];
+                            }
+                        });
+                    }
+                }
+
+                // Заполняем пропуски в данных нулями
+                const fillMissingData = (obj) => {
+                    Object.values(obj).forEach(phases => {
+                        Object.values(phases).forEach(platformData => {
+                            for (let i = 0; i < newData.iterations.length; i++) {
+                                if (platformData[i] === undefined) {
+                                    platformData[i] = 0;
+                                }
+                            }
+                        });
+                    });
+                };
+
+                fillMissingData(newData.durations);
+                fillMissingData(newData.cpu);
+                fillMissingData(newData.memory);
+
+                // Проверяем, изменились ли данные
+                if (JSON.stringify(newData) !== JSON.stringify(chartData)) {
+                    chartData = newData;
+                    updateCharts();
+                    initializeCriteria();
+                    updateRecommendation();
+                }
             } catch (error) {
                 console.error('Ошибка загрузки данных:', error);
             }
         }
 
+        // Функция для периодического обновления данных
+        function startAutoUpdate(interval = 5000) {
+            loadData(); // Начальная загрузка
+            setInterval(loadData, interval); // Периодическое обновление
+        }
+
         // Функция создания графиков
         const createLineChart = (canvasId, data, title, yAxisMax = null) => {
             const ctx = document.getElementById(canvasId);
-            new Chart(ctx, {
+            
+            if (charts[canvasId]) {
+                charts[canvasId].destroy();
+            }
+            
+            charts[canvasId] = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: chartData.iterations,
@@ -143,7 +261,9 @@
             });
         };
 
-        function initializeCharts() {
+        function updateCharts() {
+            if (!chartData) return;
+            
             createLineChart('durationBuildChart', chartData.durations.build, 'Duration (Build)');
             createLineChart('durationTestChart', chartData.durations.test, 'Duration (Test)');
             createLineChart('durationTypecheckChart', chartData.durations.typecheck, 'Duration (Typecheck)');
@@ -155,14 +275,28 @@
         }
 
         function initializeCriteria() {
-            // Инициализация сортировки
-            new Sortable(document.getElementById('criteriaList'), {
+            if (!chartData?.criteriaTranslations) return;
+
+            const criteriaList = document.getElementById('criteriaList');
+            criteriaList.innerHTML = '';
+
+            Object.entries(chartData.criteriaTranslations).forEach(([key, value]) => {
+                const li = document.createElement('li');
+                li.className = 'p-3 bg-gray-50 rounded cursor-move';
+                li.setAttribute('data-criteria', key);
+                li.textContent = value;
+                criteriaList.appendChild(li);
+            });
+
+            new Sortable(criteriaList, {
                 animation: 150,
                 onEnd: updateRecommendation
             });
         }
 
         function updateRecommendation() {
+            if (!chartData?.solutions) return;
+
             const criteria = Array.from(document.querySelectorAll('#criteriaList li'))
                 .map(li => li.getAttribute('data-criteria'));
             
@@ -222,8 +356,10 @@
             `;
         }
 
-        // Загружаем данные при загрузке страницы
-        document.addEventListener('DOMContentLoaded', loadData);
+        // Запускаем автообновление при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            startAutoUpdate();
+        });
     </script>
 </body>
 </html> 
