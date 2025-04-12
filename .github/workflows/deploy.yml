@@ -52,6 +52,7 @@ jobs:
       - name: Run GitHub experiment
         run: |
           git clone https://github.com/Benqqa/nir3-experiment1.git
+          ls -a
           ./send-test-jobs.sh ${{ github.event.inputs.job_count }} ${{ env.EXPERIMENT_FOLDER }}
 
       - name: Setup GitLab credentials
