@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализ GitOps решений</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8">Сравнительный анализ GitOps решений</h1>
+        
+        <!-- Графики производительности -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Duration (Build)</h2>
+                <canvas id="durationBuildChart"></canvas>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Duration (Test)</h2>
+                <canvas id="durationTestChart"></canvas>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Duration (Typecheck)</h2>
+                <canvas id="durationTypecheckChart"></canvas>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">CPU Usage (Build)</h2>
+                <canvas id="cpuBuildChart"></canvas>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">CPU Usage (Test)</h2>
+                <canvas id="cpuTestChart"></canvas>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">CPU Usage (Typecheck)</h2>
+                <canvas id="cpuTypecheckChart"></canvas>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Current Memory Usage</h2>
+                <canvas id="currentMemoryChart"></canvas>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Peak Memory Usage</h2>
+                <canvas id="peakMemoryChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Сортировка критериев -->
+        <div class="bg-white p-6 rounded-lg shadow mb-12">
+            <h2 class="text-xl font-semibold mb-4">Приоритеты критериев CI/CD</h2>
+            <p class="text-gray-600 mb-4">Перетащите критерии в порядке важности для вашего проекта:</p>
+            <ul id="criteriaList" class="space-y-2">
+                <li class="p-3 bg-gray-50 rounded cursor-move" data-criteria="speed">Скорость выполнения операций</li>
+                <li class="p-3 bg-gray-50 rounded cursor-move" data-criteria="stability">Стабильность выполнения операций</li>
+                <li class="p-3 bg-gray-50 rounded cursor-move" data-criteria="resources">Эффективность использования ресурсов</li>
+                <li class="p-3 bg-gray-50 rounded cursor-move" data-criteria="scalability">Масштабируемость</li>
+                <li class="p-3 bg-gray-50 rounded cursor-move" data-criteria="security">Безопасность</li>
+                <li class="p-3 bg-gray-50 rounded cursor-move" data-criteria="integration">Интеграция с существующими системами</li>
+                <li class="p-3 bg-gray-50 rounded cursor-move" data-criteria="domestic">Отечественное решение</li>
+                <li class="p-3 bg-gray-50 rounded cursor-move" data-criteria="community">Размер сообщества и поддержка</li>
+            </ul>
+        </div>
+
+        <!-- Результат подбора -->
+        <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold mb-4">Рекомендуемое решение</h2>
+            <div id="recommendation" class="text-center p-4 bg-gray-50 rounded">
+                <p class="text-gray-600">Расставьте приоритеты для получения рекомендации</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Загрузка данных из JSON
+        let chartData;
+        
+        async function loadData() {
+            try {
+                const response = await fetch('data.json');
+                chartData = await response.json();
+                initializeCharts();
+                initializeCriteria();
+            } catch (error) {
+                console.error('Ошибка загрузки данных:', error);
+            }
+        }
+
+        // Функция создания графиков
+        const createLineChart = (canvasId, data, title, yAxisMax = null) => {
+            const ctx = document.getElementById(canvasId);
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.iterations,
+                    datasets: [
+                        {
+                            label: 'GitHub Actions',
+                            data: data.github,
+                            borderColor: '#0366d6',
+                            backgroundColor: '#0366d6',
+                            fill: false
+                        },
+                        {
+                            label: 'GitLab CI',
+                            data: data.gitlab,
+                            borderColor: '#fc6d26',
+                            backgroundColor: '#fc6d26',
+                            fill: false
+                        },
+                        {
+                            label: 'GitVerse',
+                            data: data.gitverse,
+                            borderColor: '#2ea44f',
+                            backgroundColor: '#2ea44f',
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: title
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: yAxisMax
+                        }
+                    }
+                }
+            });
+        };
+
+        function initializeCharts() {
+            createLineChart('durationBuildChart', chartData.durations.build, 'Duration (Build)');
+            createLineChart('durationTestChart', chartData.durations.test, 'Duration (Test)');
+            createLineChart('durationTypecheckChart', chartData.durations.typecheck, 'Duration (Typecheck)');
+            createLineChart('cpuBuildChart', chartData.cpu.build, 'CPU Usage (Build)', 30);
+            createLineChart('cpuTestChart', chartData.cpu.test, 'CPU Usage (Test)', 30);
+            createLineChart('cpuTypecheckChart', chartData.cpu.typecheck, 'CPU Usage (Typecheck)', 30);
+            createLineChart('currentMemoryChart', chartData.memory.current, 'Current Memory Usage', 1000);
+            createLineChart('peakMemoryChart', chartData.memory.peak, 'Peak Memory Usage', 1000);
+        }
+
+        function initializeCriteria() {
+            // Инициализация сортировки
+            new Sortable(document.getElementById('criteriaList'), {
+                animation: 150,
+                onEnd: updateRecommendation
+            });
+        }
+
+        function updateRecommendation() {
+            const criteria = Array.from(document.querySelectorAll('#criteriaList li'))
+                .map(li => li.getAttribute('data-criteria'));
+            
+            const weights = {};
+            criteria.forEach((criterion, index) => {
+                weights[criterion] = (criteria.length - index) / criteria.length;
+            });
+
+            const scores = {};
+            Object.keys(chartData.solutions).forEach(solution => {
+                let score = 0;
+                let totalWeight = 0;
+                Object.keys(weights).forEach(criterion => {
+                    if (chartData.solutions[solution][criterion] !== undefined) {
+                        score += chartData.solutions[solution][criterion] * weights[criterion];
+                        totalWeight += weights[criterion];
+                    }
+                });
+                scores[solution] = totalWeight > 0 ? score / totalWeight : 0;
+            });
+
+            const sortedSolutions = Object.keys(scores)
+                .sort((a, b) => scores[b] - scores[a])
+                .map(solution => ({
+                    ...chartData.solutions[solution],
+                    score: scores[solution]
+                }));
+
+            document.getElementById('recommendation').innerHTML = `
+                <div class="space-y-6">
+                    ${sortedSolutions.map((solution, index) => `
+                        <div class="p-4 ${index === 0 ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'} rounded-lg">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-lg font-medium">${index + 1}. ${solution.name}</p>
+                                </div>
+                                <p class="text-sm text-gray-600 mt-2">${solution.description}</p>
+                                <div class="text-right">
+                                    <p class="text-sm font-medium">Общая оценка:</p>
+                                    <p class="text-lg font-bold">${(solution.score * 100).toFixed(1)}%</p>
+                                </div>
+                            </div>
+                            <div class="mt-4">
+                                <p class="text-sm font-medium">Оценки по критериям:</p>
+                                <ul class="text-sm text-gray-600 mt-2 grid grid-cols-3 gap-2">
+                                    ${criteria.map(criterion => `
+                                        <li class="flex gap-2">
+                                            <span>${chartData.criteriaTranslations[criterion]}:</span>
+                                            <span>${(solution[criterion] * 100).toFixed(0)}%</span>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Загружаем данные при загрузке страницы
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html> 
