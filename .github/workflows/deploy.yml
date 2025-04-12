@@ -51,6 +51,8 @@ jobs:
 
       - name: Run GitHub experiment
         run: |
+          mkdir github-experiment
+          cd github-experiment
           git clone https://github.com/Benqqa/nir3-experiment1.git
           cd nir3-experiment1
           ./send-test-jobs.sh ${{ github.event.inputs.job_count }} ${{ env.EXPERIMENT_FOLDER }}
@@ -61,6 +63,9 @@ jobs:
 
       - name: Run GitLab experiment
         run: |
+          ls -a
+          mkdir gitlab-experiment
+          cd gitlab-experiment
           git clone https://gitlab.com/Benqqa/nir3-experiment1.git
           cd nir3-experiment1
           ./send-test-jobs.sh ${{ github.event.inputs.job_count }} ${{ env.EXPERIMENT_FOLDER }}
@@ -71,6 +76,8 @@ jobs:
 
       - name: Run GitVerse experiment
         run: |
+          mkdir gitverse-experiment
+          cd gitverse-experiment
           git clone https://gitverse.ru/benqqa/nir3-experiment1.git
           cd nir3-experiment1
           ./send-test-jobs.sh ${{ github.event.inputs.job_count }} ${{ env.EXPERIMENT_FOLDER }} 
