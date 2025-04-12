@@ -1,23 +1,67 @@
-name: Deploy to GitHub Pages
+name: Run Experiments
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      job_count:
+        description: 'Количество jobs для запуска'
+        required: true
+        type: string
 
-permissions:
-  contents: write
+env:
+  EXPERIMENT_FOLDER: "experiment_${{ github.run_number }}"
 
 jobs:
-  deploy:
+  run-experiments:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
         with:
-          branch: gh-pages
-          folder: .
-          token: ${{ secrets.GITHUB_TOKEN }} 
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Create experiment folder and clone analysis repo
+        run: |
+          ssh -o StrictHostKeyChecking=no benqqa@158.160.181.177 "mkdir -p ${{ env.EXPERIMENT_FOLDER }}"
+          ssh -o StrictHostKeyChecking=no benqqa@158.160.181.177 "cd ${{ env.EXPERIMENT_FOLDER }} && git clone https://github.com/Benqqa/analysis-GitOps-solutions.git"
+
+      - name: Setup GitHub credentials
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          echo "machine github.com login ${{ secrets.GH_USERNAME }} password ${{ secrets.GH_TOKEN }}" > ~/.netrc
+
+      - name: Run GitHub experiment
+        run: |
+          ssh -o StrictHostKeyChecking=no benqqa@158.160.181.177 "cd ${{ env.EXPERIMENT_FOLDER }} && \
+          git clone https://github.com/Benqqa/nir3-experiment1.git github-experiment && \
+          cd github-experiment && \
+          ./send-test-jobs.sh ${{ github.event.inputs.job_count }} ${{ env.EXPERIMENT_FOLDER }}"
+
+      - name: Setup GitLab credentials
+        run: |
+          echo "machine gitlab.com login ${{ secrets.GITLAB_USERNAME }} password ${{ secrets.GITLAB_TOKEN }}" > ~/.netrc
+
+      - name: Run GitLab experiment
+        run: |
+          ssh -o StrictHostKeyChecking=no benqqa@158.160.181.177 "cd ${{ env.EXPERIMENT_FOLDER }} && \
+          git clone https://gitlab.com/Benqqa/nir3-experiment1.git gitlab-experiment && \
+          cd gitlab-experiment && \
+          ./send-test-jobs.sh ${{ github.event.inputs.job_count }} ${{ env.EXPERIMENT_FOLDER }}"
+
+      - name: Setup GitVerse credentials
+        run: |
+          echo "machine gitverse.ru login ${{ secrets.GITVERSE_USERNAME }} password ${{ secrets.GITVERSE_TOKEN }}" > ~/.netrc
+
+      - name: Run GitVerse experiment
+        run: |
+          ssh -o StrictHostKeyChecking=no benqqa@158.160.181.177 "cd ${{ env.EXPERIMENT_FOLDER }} && \
+          git clone https://gitverse.ru/benqqa/nir3-experiment1.git gitverse-experiment && \
+          cd gitverse-experiment && \
+          ./send-test-jobs.sh ${{ github.event.inputs.job_count }} ${{ env.EXPERIMENT_FOLDER }}" 
