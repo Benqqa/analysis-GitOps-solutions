@@ -54,6 +54,33 @@
             </div>
         </div>
 
+        <!-- Таблица коэффициентов вариации -->
+        <div class="bg-white p-6 rounded-lg shadow mb-12">
+            <h2 class="text-xl font-semibold mb-4">Коэффициенты вариации (CV)</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full table-auto">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th class="px-4 py-2 text-left">Операция</th>
+                            <th class="px-4 py-2 text-left">Платформа</th>
+                            <th class="px-4 py-2 text-left">Коэффициент вариации</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cvTableBody">
+                        <!-- Данные будут добавлены через JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 text-sm text-gray-600">
+                <p>Интерпретация коэффициента вариации:</p>
+                <ul class="list-disc list-inside mt-2">
+                    <li class="text-green-600">менее 10% - низкий уровень риска</li>
+                    <li class="text-orange-500">10-20% - умеренный риск</li>
+                    <li class="text-red-600">более 30% - чрезмерно высокий риск</li>
+                </ul>
+            </div>
+        </div>
+
         <!-- Сортировка критериев -->
         <div class="bg-white p-6 rounded-lg shadow mb-12">
             <h2 class="text-xl font-semibold mb-4">Приоритеты критериев CI/CD</h2>
@@ -272,6 +299,8 @@
             createLineChart('cpuTypecheckChart', chartData.cpu.typecheck, 'CPU Usage (Typecheck)', 30);
             createLineChart('currentMemoryChart', chartData.memory.current, 'Current Memory Usage', 1000);
             createLineChart('peakMemoryChart', chartData.memory.peak, 'Peak Memory Usage', 1000);
+            
+            updateCVTable();
         }
 
         function initializeCriteria() {
@@ -354,6 +383,86 @@
                     `).join('')}
                 </div>
             `;
+        }
+
+        // Функция для расчета коэффициента вариации
+        function calculateCV(data) {
+            if (!data || data.length === 0) return null;
+            
+            // Фильтруем нулевые, отрицательные и undefined значения
+            const validData = data.filter(value => value && value > 0);
+            
+            // Если нет валидных данных, возвращаем null
+            if (validData.length === 0) return null;
+            
+            // Рассчитываем среднее значение
+            const mean = validData.reduce((sum, val) => sum + val, 0) / validData.length;
+            
+            // Рассчитываем стандартное отклонение
+            const variance = validData.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / validData.length;
+            const stdDev = Math.sqrt(variance);
+            
+            // Возвращаем коэффициент вариации
+            return (stdDev / mean) * 100;
+        }
+
+        // Функция для определения цвета на основе значения CV
+        function getCVColorClass(cv) {
+            if (cv < 10) return 'text-green-600';
+            if (cv < 20) return 'text-orange-500';
+            if (cv < 30) return 'text-yellow-600';
+            return 'text-red-600';
+        }
+
+        // Функция обновления таблицы коэффициентов вариации
+        function updateCVTable() {
+            if (!chartData) return;
+
+            const tableBody = document.getElementById('cvTableBody');
+            tableBody.innerHTML = '';
+
+            const operations = {
+                'BUILD': chartData.durations.build,
+                'TEST': chartData.durations.test,
+                'TYPECHECK': chartData.durations.typecheck
+            };
+
+            const platforms = ['github', 'gitlab', 'gitverse'];
+            const platformNames = {
+                'github': 'GitHub Actions',
+                'gitlab': 'GitLab CI',
+                'gitverse': 'GitVerse'
+            };
+
+            for (const [operation, data] of Object.entries(operations)) {
+                for (const platform of platforms) {
+                    const cv = calculateCV(data[platform]);
+                    
+                    // Если нет данных для расчета CV
+                    if (cv === null) {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td class="border px-4 py-2">${operation}</td>
+                            <td class="border px-4 py-2">${platformNames[platform]}</td>
+                            <td class="border px-4 py-2 text-gray-500">Нет данных</td>
+                        `;
+                        tableBody.appendChild(row);
+                        continue;
+                    }
+
+                    const colorClass = getCVColorClass(cv);
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="border px-4 py-2">${operation}</td>
+                        <td class="border px-4 py-2">${platformNames[platform]}</td>
+                        <td class="border px-4 py-2 ${colorClass}">
+                            CV=${cv.toFixed(2)}%
+                            ${cv > 100 ? '<span class="text-xs text-red-500 ml-2">(Требуется проверка данных)</span>' : ''}
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                }
+            }
         }
 
         // Запускаем автообновление при загрузке страницы
